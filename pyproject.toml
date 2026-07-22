@@ -1,0 +1,37 @@
+[project]
+name = "bvb-mcp"
+version = "0.1.0"
+description = "Read-only MCP server for the Bucharest Stock Exchange (BVB) public backend"
+authors = [{ name = "Florinel Chis" }]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp>=2.14,<3",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+bvb-mcp = "bvb_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bvb_mcp"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.26",
+    "respx>=0.22",
+    "ruff>=0.8",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 100
