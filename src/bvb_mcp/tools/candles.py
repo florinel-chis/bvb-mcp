@@ -118,7 +118,7 @@ def register(mcp: FastMCP, client: BvbClient, settings: Settings) -> None:
 
         Returns bars oldest-first, each ``{time, open, high, low, close,
         volume}`` where ``time`` is an ISO 8601 UTC timestamp and ``volume`` is
-        an integer. An empty list means the datafeed had no data for the window
+        an integer (null for indices such as BET, which carry no volume). An empty list means the datafeed had no data for the window
         (not an error).
 
         The window is resolved as: ``to`` defaults to now; ``countback`` (when
@@ -173,7 +173,10 @@ def register(mcp: FastMCP, client: BvbClient, settings: Settings) -> None:
                     "high": highs[i] if i < len(highs) else None,
                     "low": lows[i] if i < len(lows) else None,
                     "close": closes[i] if i < len(closes) else None,
-                    "volume": int(volumes[i]) if i < len(volumes) else None,
+                    # Indices carry no volume: the datafeed sends null per bar.
+                    "volume": int(volumes[i])
+                    if i < len(volumes) and volumes[i] is not None
+                    else None,
                 }
             )
         return bars

@@ -100,3 +100,22 @@ async def test_unsupported_resolution_rejected(make_server, settings) -> None:
     async with fastmcp.Client(server) as c:
         with pytest.raises(ToolError, match="unsupported resolution"):
             await c.call_tool("get_candles", {"ticker": "TLV", "resolution": "4H"})
+
+
+@respx.mock
+async def test_index_bars_with_null_volume(make_server, settings) -> None:
+    # Indices (e.g. BET) carry no volume: the datafeed sends v=[null, ...].
+    # Prices must still come through, with volume null rather than a crash.
+    respx.get(HISTORY).mock(
+        return_value=Response(
+            200,
+            json={"s": "ok", "t": [1784505600, 1785110400], "o": [18000.5, 18100.0],
+                  "h": [18200.0, 18300.0], "l": [17900.0, 18050.0],
+                  "c": [18150.25, 18250.75], "v": [None, None]},
+        )
+    )
+    server = make_server(settings, candles.register)
+    async with fastmcp.Client(server) as c:
+        result = await c.call_tool("get_candles", {"ticker": "BET", "resolution": "1W"})
+    assert [bar["close"] for bar in result.data] == [18150.25, 18250.75]
+    assert [bar["volume"] for bar in result.data] == [None, None]
