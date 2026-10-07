@@ -63,3 +63,13 @@ def test_help_exits_zero(monkeypatch, capsys) -> None:
         server_main()
     assert excinfo.value.code == 0
     assert "usage: bvb-mcp" in capsys.readouterr().out
+
+
+async def test_server_reports_package_version(settings) -> None:
+    # serverInfo.version is bvb-mcp's own version, not the FastMCP library's.
+    from importlib.metadata import version
+
+    async with Client(build_server(settings)) as client:
+        info = client.initialize_result.serverInfo
+    assert info.name == "bvb-mcp"
+    assert info.version == version("bvb-mcp")

@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bvb-mcp playground</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231d4ed8'/%3E%3Cpath d='M7 21l6-7 5 4 7-9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f1f3f6; --text: #14171c; --muted: #5d6673;
+  --line: #e2e6eb; --accent: #1d4ed8; --accent-soft: #e6edff; --bid: #0f8a4c; --bid-soft: #dcf3e6;
+  --ask: #c62a3a; --ask-soft: #fbe3e6; --warn: #9a6200; --warn-soft: #fff1d6;
+  --code: #0f172a; --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --panel: #151b23; --panel-2: #1b222c; --text: #e6e9ee; --muted: #9aa4b2;
+    --line: #2a323d; --accent: #6b9bff; --accent-soft: #1b2a4a; --bid: #3fcf8e; --bid-soft: #12301f;
+    --ask: #ff6b7a; --ask-soft: #3a1820; --warn: #f0b44c; --warn-soft: #3a2c12;
+    --code: #e6e9ee; --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+header { display: flex; align-items: center; gap: 14px; padding: 14px 24px;
+  background: var(--panel); border-bottom: 1px solid var(--line); }
+.logo { width: 38px; height: 38px; border-radius: 9px; display: grid; place-items: center;
+  background: linear-gradient(135deg, #1d4ed8, #0ea5a4); color: #fff; font-weight: 800; letter-spacing: .5px; font-size: 13px; }
+header h1 { font-size: 17px; margin: 0; }
+header p { margin: 0; color: var(--muted); font-size: 13px; }
+.status { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted);
+  padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel-2); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+.dot.ok { background: var(--bid); } .dot.err { background: var(--ask); }
+main { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 20px; padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 16px; } header { flex-wrap: wrap; } .status { margin-left: 0; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.card > h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0; padding: 14px 16px 8px; }
+.examples { display: flex; flex-direction: column; gap: 8px; padding: 4px 12px 14px; }
+.ex { text-align: left; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 10px;
+  padding: 10px 12px; cursor: pointer; font: inherit; transition: border-color .12s, background .12s; }
+.ex:hover { border-color: var(--accent); background: var(--accent-soft); }
+.ex.active { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.ex b { display: block; font-size: 14px; }
+.ex span { display: block; color: var(--muted); font-size: 12.5px; }
+.ex code { font-family: var(--mono); font-size: 11.5px; color: var(--accent); }
+.side { display: flex; flex-direction: column; gap: 20px; }
+select, input[type=text], input[type=number] { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); color: var(--text); font: inherit; }
+.toolpick { padding: 4px 12px 14px; }
+.toolpick p { color: var(--muted); font-size: 12.5px; margin: 8px 2px 0; }
+.content { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.request { padding: 16px; }
+.reqhead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.reqhead h3 { margin: 0; font-family: var(--mono); font-size: 16px; }
+.reqhead .desc { color: var(--muted); font-size: 13px; flex: 1 1 100%; white-space: pre-line; max-height: 4.5em; overflow: hidden; }
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin: 14px 0; }
+.field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; font-family: var(--mono); }
+.field label i { color: var(--ask); font-style: normal; }
+.field.check { display: flex; align-items: end; }
+.field.check label { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+.actions { display: flex; gap: 10px; align-items: center; }
+button.run { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 9px 18px; font: inherit; font-weight: 600; cursor: pointer; }
+button.run:disabled { opacity: .55; cursor: progress; }
+.meta { color: var(--muted); font-size: 12.5px; font-family: var(--mono); }
+.result { min-height: 240px; }
+.tabs { display: flex; gap: 4px; padding: 10px 12px 0; border-bottom: 1px solid var(--line); }
+.tab { border: 0; background: none; color: var(--muted); padding: 8px 12px; font: inherit; cursor: pointer; border-bottom: 2px solid transparent; }
+.tab.on { color: var(--text); border-color: var(--accent); font-weight: 600; }
+.pane { padding: 16px; overflow-x: auto; }
+.empty { color: var(--muted); padding: 40px 0; text-align: center; }
+.error { background: var(--ask-soft); color: var(--ask); border-radius: 8px; padding: 12px 14px; font-family: var(--mono); font-size: 13px; white-space: pre-wrap; }
+pre.json { margin: 0; font: 12.5px/1.55 var(--mono); color: var(--code); white-space: pre-wrap; word-break: break-word; }
+.k { color: #7c3aed; } .s { color: #0f766e; } .n { color: #b45309; } .b { color: #be185d; }
+@media (prefers-color-scheme: dark) { .k { color: #c4a7ff; } .s { color: #5eead4; } .n { color: #fbbf24; } .b { color: #f9a8d4; } }
+table.t { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.t th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.t td { padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.t td.num, table.t th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.kpi { background: var(--panel-2); border-radius: 10px; padding: 10px 12px; }
+.kpi .l { color: var(--muted); font-size: 12px; } .kpi .x { color: var(--muted); font-size: 12px; font-family: var(--mono); } .kpi .v { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.up { color: var(--bid); } .down { color: var(--ask); }
+.title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 0 0 14px; }
+.title h3 { margin: 0; font-size: 18px; } .title .sub { color: var(--muted); }
+.badge { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); font-weight: 600; }
+.badge.blue { background: var(--accent-soft); color: var(--accent); }
+.ladder { width: 100%; max-width: 760px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.ladder th { font-size: 12px; color: var(--muted); font-weight: 600; padding: 6px 10px; }
+.ladder td { padding: 7px 10px; position: relative; }
+.ladder tr + tr td { border-top: 1px solid var(--line); }
+.ladder .bar { position: absolute; top: 4px; bottom: 4px; border-radius: 4px; }
+.ladder .bidbar { right: 0; background: var(--bid-soft); } .ladder .askbar { left: 0; background: var(--ask-soft); }
+.ladder .vol { position: relative; } .ladder .px { font-weight: 650; } .ladder .num { text-align: right; }
+.ladder .bidpx { color: var(--bid); text-align: right; } .ladder .askpx { color: var(--ask); }
+.chart { width: 100%; height: 260px; display: block; }
+.chart text { fill: var(--muted); font-size: 11px; font-family: var(--mono); }
+.chart .grid { stroke: var(--line); }
+.tip { font-family: var(--mono); font-size: 12px; color: var(--muted); height: 18px; margin-top: 4px; }
+h4 { margin: 18px 0 8px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 0 24px; }
+footer code { font-family: var(--mono); }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">BVB</div>
+  <div>
+    <h1>bvb-mcp playground</h1>
+    <p>Bucharest Stock Exchange data through the Model Context Protocol. This page is a live MCP client.</p>
+  </div>
+  <div class="status" id="status"><span class="dot" id="dot"></span><span id="statusText">connecting…</span></div>
+</header>
+
+<main>
+  <aside class="side">
+    <section class="card">
+      <h2>Examples</h2>
+      <div class="examples" id="examples"></div>
+    </section>
+    <section class="card">
+      <h2>Any tool</h2>
+      <div class="toolpick">
+        <select id="toolSelect" aria-label="Tool"></select>
+        <p>Pick a tool to get a form generated from its input schema.</p>
+      </div>
+    </section>
+  </aside>
+
+  <section class="content">
+    <div class="card request">
+      <div class="reqhead">
+        <h3 id="toolName">—</h3>
+        <span class="meta" id="callMeta"></span>
+        <div class="desc" id="toolDesc">Choose an example or a tool.</div>
+      </div>
+      <form id="form">
+        <div class="fields" id="fields"></div>
+        <div class="actions">
+          <button class="run" id="runBtn" type="submit" disabled>Run tool</button>
+          <span class="meta" id="timing"></span>
+        </div>
+      </form>
+    </div>
+
+    <div class="card result">
+      <div class="tabs">
+        <button class="tab on" data-tab="view" type="button">Result</button>
+        <button class="tab" data-tab="json" type="button">JSON</button>
+        <button class="tab" data-tab="rpc" type="button">MCP request</button>
+      </div>
+      <div class="pane" id="pane"><div class="empty">Results appear here.</div></div>
+    </div>
+  </section>
+</main>
+<footer>Read-only · data from BVB's public backend (order book delayed 15 min) · endpoint <code>/mcp</code></footer>
+
+<script>
+"use strict";
+// ---------------------------------------------------------------- MCP client
+// Streamable HTTP transport: JSON-RPC over POST to /mcp. Replies are JSON or an
+// SSE stream ("event: message" / "data: {...}"); the session id comes back in
+// the mcp-session-id header and is sent on every later request.
+const MCP = "/mcp";
+const PROTOCOL = "2025-06-18";
+let session = null;
+let nextId = 1;
+
+function parseSSE(text, id) {
+  const messages = [];
+  for (const block of text.split(/\r?\n\r?\n/)) {
+    const data = block.split(/\r?\n/).filter(l => l.startsWith("data:")).map(l => l.slice(5).trimStart()).join("\n");
+    if (data) { try { messages.push(JSON.parse(data)); } catch (e) { /* keep-alive or partial frame */ } }
+  }
+  return messages.find(m => m.id === id);
+}
+
+async function post(body) {
+  const headers = { "Content-Type": "application/json", "Accept": "application/json, text/event-stream" };
+  if (session) { headers["mcp-session-id"] = session; headers["mcp-protocol-version"] = PROTOCOL; }
+  const res = await fetch(MCP, { method: "POST", headers, body: JSON.stringify(body) });
+  const sid = res.headers.get("mcp-session-id");
+  if (sid) session = sid;
+  return res;
+}
+
+async function rpc(method, params, retried = false) {
+  const body = { jsonrpc: "2.0", id: nextId++, method, params };
+  const res = await post(body);
+  if ((res.status === 404 || res.status === 400) && session && !retried && method !== "initialize") {
+    session = null;            // session expired (e.g. server restarted): start over once
+    await connect();
+    return rpc(method, params, true);
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  const ct = res.headers.get("content-type") || "";
+  const msg = ct.includes("text/event-stream") ? parseSSE(await res.text(), body.id) : await res.json();
+  if (!msg) throw new Error(`no response for request ${body.id} (${method})`);
+  if (msg.error) throw new Error(msg.error.message || JSON.stringify(msg.error));
+  return msg.result;
+}
+
+async function notify(method, params) {
+  await post({ jsonrpc: "2.0", method, params });
+}
+
+async function connect() {
+  const init = await rpc("initialize", {
+    protocolVersion: PROTOCOL, capabilities: {},
+    clientInfo: { name: "bvb-mcp-playground", version: "1.0" },
+  });
+  await notify("notifications/initialized", {});
+  return init;
+}
+
+async function callTool(name, args) {
+  const r = await rpc("tools/call", { name, arguments: args });
+  const text = (r.content || []).filter(c => c.type === "text").map(c => c.text).join("\n");
+  if (r.isError) throw new Error(text || "tool error");
+  let data = r.structuredContent;
+  if (data && Object.keys(data).length === 1 && "result" in data) data = data.result;   // wrapped list/scalar
+  if (data === undefined || data === null) { try { data = JSON.parse(text); } catch (e) { data = text; } }
+  return data;
+}
+
+// ---------------------------------------------------------------- examples
+const EXAMPLES = [
+  { title: "Order book · ATB", desc: "Top-5 bids and asks on the main market", tool: "get_order_book", args: { ticker: "ATB" } },
+  { title: "Price history · TLV", desc: "Banca Transilvania, last 250 daily closes", tool: "get_candles", args: { ticker: "TLV", resolution: "1D", countback: 250 } },
+  { title: "Buffett snapshot · SNP", desc: "Valuation, dividend, ownership and price trend", tool: "financial_summary", args: { ticker: "SNP" } },
+  { title: "Fundamentals · H2O", desc: "Hidroelectrica: ratios, issue info, shareholders", tool: "get_fundamentals", args: { ticker: "H2O" } },
+  { title: "BET index · weekly", desc: "Five years of the benchmark index", tool: "get_candles", args: { ticker: "BET", resolution: "1W", countback: 260 } },
+  { title: "Search · “banca”", desc: "Datafeed symbol search", tool: "search_symbol", args: { query: "banca", limit: 10 } },
+  { title: "All listed shares", desc: "Ticker, ISIN and issuer for the shares market", tool: "list_instruments", args: { market: "shares", limit: 200 } },
+  { title: "Indices", desc: "BET, BET-TR, BET-FI, ROTX and the rest", tool: "list_indices", args: {} },
+  { title: "Server time", desc: "Reachability check", tool: "server_time", args: {} },
+];
+
+// ---------------------------------------------------------------- helpers
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const nf = (v, d) => v === null || v === undefined || v === "" ? "—"
+  : typeof v === "number" ? v.toLocaleString("en-US", d === undefined ? { maximumFractionDigits: 6 } : { minimumFractionDigits: d, maximumFractionDigits: d }) : esc(v);
+const pct = v => v === null || v === undefined ? "—" : `<span class="${v >= 0 ? "up" : "down"}">${v >= 0 ? "+" : ""}${v.toFixed(2)}%</span>`;
+const kpi = (label, value, extra) => `<div class="kpi"><div class="l">${esc(label)}</div><div class="v">${value}</div>${extra ? `<div class="x">${extra}</div>` : ""}</div>`;
+
+function jsonHTML(value) {
+  const s = JSON.stringify(value, null, 2) ?? "undefined";
+  return esc(s).replace(/(&quot;(?:\\.|[^&]|&(?!quot;))*?&quot;)(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g,
+    (m, str, colon, lit) => str ? `<span class="${colon ? "k" : "s"}">${str}</span>${colon || ""}` : lit ? `<span class="b">${m}</span>` : `<span class="n">${m}</span>`);
+}
+
+// ---------------------------------------------------------------- renderers
+function renderOrderBook(d) {
+  const bids = d.bids || [], asks = d.asks || [];
+  const rows = Math.max(bids.length, asks.length);
+  const maxVol = Math.max(1, ...bids.map(l => l.volume), ...asks.map(l => l.volume));
+  let body = "";
+  for (let i = 0; i < rows; i++) {
+    const b = bids[i], a = asks[i];
+    body += `<tr>
+      <td class="num vol">${b ? `<span class="bar bidbar" style="width:${(b.volume / maxVol * 100).toFixed(1)}%"></span><span class="vol">${nf(b.volume)}</span>` : ""}</td>
+      <td class="px bidpx">${b ? nf(b.price, 4) : ""}</td>
+      <td class="px askpx">${a ? nf(a.price, 4) : ""}</td>
+      <td class="vol">${a ? `<span class="bar askbar" style="width:${(a.volume / maxVol * 100).toFixed(1)}%"></span><span class="vol">${nf(a.volume)}</span>` : ""}</td>
+    </tr>`;
+  }
+  const best = bids[0] && asks[0];
+  const spread = best ? asks[0].price - bids[0].price : null;
+  const mid = best ? (asks[0].price + bids[0].price) / 2 : null;
+  return `<div class="title"><h3>${esc(d.ticker)}</h3><span class="sub">order book · ${esc(d.market)} · ${esc(d.currency)}</span>
+      ${d.delayed ? '<span class="badge">delayed 15 min</span>' : ""}</div>
+    <div class="kpis">
+      ${kpi("Best bid", best ? nf(bids[0].price, 4) : "—")}${kpi("Best ask", best ? nf(asks[0].price, 4) : "—")}
+      ${kpi("Spread", spread === null ? "—" : nf(spread, 4), spread === null ? "" : `${(spread / mid * 1e4).toFixed(1)} bps of mid`)}
+      ${kpi("Updated", d.updated_at ? esc(d.updated_at.slice(11, 16)) : "—", d.updated_at ? `${esc(d.updated_at.slice(0, 10))} · Bucharest` : "")}
+    </div>
+    ${rows ? `<table class="ladder"><thead><tr><th class="num">Bid vol</th><th class="num">Bid</th><th>Ask</th><th>Ask vol</th></tr></thead><tbody>${body}</tbody></table>`
+           : '<div class="empty">No resting orders.</div>'}`;
+}
+
+function renderCandles(bars, args) {
+  if (!bars.length) return '<div class="empty">No bars for this window.</div>';
+  const closes = bars.map(b => b.close), first = closes[0], last = closes[closes.length - 1];
+  const lo = Math.min(...bars.map(b => b.low ?? b.close)), hi = Math.max(...bars.map(b => b.high ?? b.close));
+  const W = 900, H = 260, L = 8, R = 64, T = 12, B = 26;
+  const x = i => L + (W - L - R) * (bars.length === 1 ? 0.5 : i / (bars.length - 1));
+  const y = v => T + (H - T - B) * (1 - (v - lo) / ((hi - lo) || 1));
+  const line = closes.map((c, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(c).toFixed(1)}`).join("");
+  const color = last >= first ? "var(--bid)" : "var(--ask)";
+  const grid = [0, 0.25, 0.5, 0.75, 1].map(f => {
+    const v = lo + (hi - lo) * f, yy = y(v).toFixed(1);
+    return `<line class="grid" x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}"/><text x="${W - R + 6}" y="${(+yy + 4).toFixed(1)}">${nf(v, 2)}</text>`;
+  }).join("");
+  const date = t => esc(String(t).slice(0, 10));
+  const recent = bars.slice(-8).reverse().map(b => `<tr><td>${date(b.time)}</td><td class="num">${nf(b.open, 4)}</td><td class="num">${nf(b.high, 4)}</td>
+    <td class="num">${nf(b.low, 4)}</td><td class="num">${nf(b.close, 4)}</td><td class="num">${nf(b.volume)}</td></tr>`).join("");
+  return `<div class="title"><h3>${esc(args.ticker || "")}</h3><span class="sub">${bars.length} bars · ${esc(args.resolution || "1D")} · ${date(bars[0].time)} → ${date(bars[bars.length - 1].time)}</span></div>
+    <div class="kpis">${kpi("Last close", nf(last, 4))}${kpi("Change", pct((last / first - 1) * 100))}${kpi("High", nf(hi, 4))}${kpi("Low", nf(lo, 4))}</div>
+    <svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" id="chart">
+      <defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".28"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
+      ${grid}
+      <path d="${line}L${x(bars.length - 1).toFixed(1)},${H - B}L${x(0).toFixed(1)},${H - B}Z" fill="url(#fill)"/>
+      <path d="${line}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/>
+      <line id="cross" class="grid" y1="${T}" y2="${H - B}" x1="-10" x2="-10"/>
+      <text x="${L}" y="${H - 8}">${date(bars[0].time)}</text><text x="${W - R}" y="${H - 8}" text-anchor="end">${date(bars[bars.length - 1].time)}</text>
+    </svg>
+    <div class="tip" id="tip">hover the chart</div>
+    <h4>Most recent bars</h4>
+    <table class="t"><thead><tr><th>Date</th><th class="num">Open</th><th class="num">High</th><th class="num">Low</th><th class="num">Close</th><th class="num">Volume</th></tr></thead><tbody>${recent}</tbody></table>`;
+}
+
+function bindChart(bars) {
+  const svg = $("chart"); if (!svg) return;
+  const W = 900, L = 8, R = 64;
+  svg.addEventListener("mousemove", e => {
+    const box = svg.getBoundingClientRect();
+    const vx = (e.clientX - box.left) / box.width * W;
+    const i = Math.max(0, Math.min(bars.length - 1, Math.round((vx - L) / (W - L - R) * (bars.length - 1))));
+    const xx = L + (W - L - R) * (bars.length === 1 ? 0.5 : i / (bars.length - 1));
+    $("cross").setAttribute("x1", xx); $("cross").setAttribute("x2", xx);
+    const b = bars[i];
+    $("tip").textContent = `${String(b.time).slice(0, 10)}  O ${b.open}  H ${b.high}  L ${b.low}  C ${b.close}  V ${b.volume == null ? "—" : b.volume.toLocaleString("en-US")}`;
+  });
+}
+
+function holdersTable(rows) {
+  if (!rows || !rows.length) return "";
+  return `<h4>Shareholders</h4><table class="t"><thead><tr><th>Holder</th><th class="num">Shares</th><th class="num">%</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td>${esc(r.name)}</td><td class="num">${nf(r.shares)}</td><td class="num">${nf(r.percent, 2)}</td></tr>`).join("")}</tbody></table>`;
+}
+
+function fundamentalsKPIs(f) {
+  return kpi("Market cap (RON)", nf(f.market_cap, 0)) + kpi("P/E", nf(f.per, 2)) + kpi("P/BV", nf(f.pbv, 2)) + kpi("EPS", nf(f.eps, 4))
+    + kpi("Dividend yield", f.div_yield == null ? "—" : nf(f.div_yield, 2) + "%")
+    + kpi(`Dividend${f.dividend_year ? " (" + esc(f.dividend_year) + ")" : ""}`, nf(f.dividend));
+}
+
+function renderFundamentals(f) {
+  const facts = [["ISIN", f.isin], ["Type", f.type], ["Segment", f.segment], ["Category", f.category], ["Status", f.status],
+    ["Shares outstanding", f.shares_outstanding], ["Nominal value", f.nominal_value], ["Share capital", f.share_capital], ["First trade", f.first_trade_date]];
+  return `<div class="title"><h3>${esc(f.ticker)}</h3><span class="sub">${esc(f.name)}</span></div>
+    <div class="kpis">${fundamentalsKPIs(f)}</div>
+    <h4>Issue</h4><table class="t"><tbody>${facts.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${nf(v)}</td></tr>`).join("")}</tbody></table>
+    ${holdersTable(f.shareholders)}`;
+}
+
+function renderSummary(d) {
+  const p = d.price || {}, f = d.fundamentals || {};
+  return `<div class="title"><h3>${esc(d.ticker)}</h3><span class="sub">${esc(d.name)}</span><span class="badge blue">data, not a verdict</span></div>
+    <h4>Price</h4><div class="kpis">${kpi("Last close", nf(p.last_close, 4))}${kpi("52w high", nf(p.high_52w, 4))}${kpi("52w low", nf(p.low_52w, 4))}
+      ${kpi("1y change", pct(p.change_1y_pct))}${kpi("~5y change", pct(p.change_5y_pct))}</div>
+    <h4>Valuation</h4><div class="kpis">${fundamentalsKPIs(f)}</div>
+    ${holdersTable(f.shareholders)}
+    <p class="meta">${esc(d.note)}</p>`;
+}
+
+function renderTable(rows) {
+  if (!rows.length) return '<div class="empty">No rows.</div>';
+  if (typeof rows[0] !== "object") return `<pre class="json">${jsonHTML(rows)}</pre>`;
+  const cols = [...new Set(rows.flatMap(r => Object.keys(r)))];
+  return `<div class="title"><h3>${rows.length} rows</h3></div><table class="t"><thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>
+    ${rows.map(r => `<tr>${cols.map(c => { const v = r[c]; return typeof v === "number" ? `<td class="num">${nf(v)}</td>`
+      : `<td>${v !== null && typeof v === "object" ? esc(JSON.stringify(v)) : nf(v)}</td>`; }).join("")}</tr>`).join("")}</tbody></table>`;
+}
+
+function renderObject(o) {
+  return `<table class="t"><tbody>${Object.entries(o).map(([k, v]) => `<tr><th>${esc(k)}</th><td>${
+    v !== null && typeof v === "object" ? `<pre class="json">${jsonHTML(v)}</pre>` : nf(v)}</td></tr>`).join("")}</tbody></table>`;
+}
+
+function render(tool, data, args) {
+  if (tool === "get_order_book") return renderOrderBook(data);
+  if (tool === "get_candles" && Array.isArray(data)) return renderCandles(data, args);
+  if (tool === "financial_summary") return renderSummary(data);
+  if (tool === "get_fundamentals") return renderFundamentals(data);
+  if (Array.isArray(data)) return renderTable(data);
+  if (data && typeof data === "object") return renderObject(data);
+  return `<pre class="json">${jsonHTML(data)}</pre>`;
+}
+
+// ---------------------------------------------------------------- UI state
+let tools = [];
+let current = null;          // selected tool definition
+let last = null;             // { tool, args, data, error, request }
+let tab = "view";
+let runSeq = 0;              // only the latest run may paint (examples stay clickable)
+
+function fieldsFor(tool, values) {
+  const props = (tool.inputSchema && tool.inputSchema.properties) || {};
+  const required = new Set((tool.inputSchema && tool.inputSchema.required) || []);
+  return Object.entries(props).map(([name, schema]) => {
+    const types = schema.type ? [].concat(schema.type) : (schema.anyOf || []).map(s => s.type);
+    const type = types.find(t => t !== "null") || "string";
+    const value = values[name] ?? schema.default ?? "";
+    const hint = esc(schema.description || "");
+    const label = `${esc(name)}${required.has(name) ? " <i>*</i>" : ""}`;
+    if (type === "boolean") {
+      return `<div class="field check" title="${hint}"><label><input type="checkbox" name="${esc(name)}" data-type="boolean" ${value === true ? "checked" : ""}> ${label}</label></div>`;
+    }
+    const inputType = type === "integer" || type === "number" ? "number" : "text";
+    return `<div class="field" title="${hint}"><label>${label}</label><input type="${inputType}" name="${esc(name)}" data-type="${esc(type)}" value="${esc(value)}" placeholder="${esc(schema.default ?? "")}" ${required.has(name) ? "required" : ""}></div>`;
+  }).join("");
+}
+
+function selectTool(name, values = {}) {
+  current = tools.find(t => t.name === name);
+  if (!current) return;
+  $("toolSelect").value = name;
+  $("toolName").textContent = current.name;
+  $("toolDesc").textContent = (current.description || "").split("\n\n")[0];
+  $("fields").innerHTML = fieldsFor(current, values) || '<span class="meta">No parameters.</span>';
+  $("runBtn").disabled = false;
+}
+
+function readArgs() {
+  const args = {};
+  for (const el of $("fields").querySelectorAll("input")) {
+    const t = el.dataset.type;
+    if (t === "boolean") { args[el.name] = el.checked; continue; }
+    if (el.value === "") continue;
+    args[el.name] = t === "integer" ? parseInt(el.value, 10) : t === "number" ? parseFloat(el.value) : el.value;
+  }
+  return args;
+}
+
+function paint() {
+  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
+  const pane = $("pane");
+  if (!last) { pane.innerHTML = '<div class="empty">Results appear here.</div>'; return; }
+  if (tab === "rpc") { pane.innerHTML = `<pre class="json">${jsonHTML(last.request)}</pre>`; return; }
+  if (last.error) { pane.innerHTML = `<div class="error">${esc(last.error)}</div>`; return; }
+  if (tab === "json") { pane.innerHTML = `<pre class="json">${jsonHTML(last.data)}</pre>`; return; }
+  pane.innerHTML = render(last.tool, last.data, last.args);
+  if (last.tool === "get_candles" && Array.isArray(last.data)) bindChart(last.data);
+}
+
+async function run(name, args) {
+  const seq = ++runSeq;
+  $("runBtn").disabled = true;
+  $("timing").textContent = "calling…";
+  const request = { jsonrpc: "2.0", method: "tools/call", params: { name, arguments: args } };
+  const t0 = performance.now();
+  let outcome;
+  try {
+    outcome = { tool: name, args, data: await callTool(name, args), request };
+  } catch (e) {
+    outcome = { tool: name, args, error: e.message, request };
+  }
+  if (seq !== runSeq) return;  // a newer run started meanwhile: drop this result
+  last = outcome;
+  $("timing").textContent = `${Math.round(performance.now() - t0)} ms${last.error ? " · error" : ""}`;
+  $("runBtn").disabled = false;
+  paint();
+}
+
+// ---------------------------------------------------------------- boot
+document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => { tab = b.dataset.tab; paint(); }));
+$("form").addEventListener("submit", e => { e.preventDefault(); if (current) run(current.name, readArgs()); });
+$("toolSelect").addEventListener("change", e => { document.querySelectorAll(".ex").forEach(x => x.classList.remove("active")); selectTool(e.target.value); });
+
+function renderExamples() {
+  $("examples").innerHTML = EXAMPLES.map((ex, i) => `<button class="ex" type="button" data-i="${i}">
+      <b>${esc(ex.title)}</b><span>${esc(ex.desc)}</span><code>${esc(ex.tool)}</code></button>`).join("");
+  $("examples").querySelectorAll(".ex").forEach(btn => btn.addEventListener("click", () => {
+    const ex = EXAMPLES[+btn.dataset.i];
+    document.querySelectorAll(".ex").forEach(x => x.classList.toggle("active", x === btn));
+    selectTool(ex.tool, ex.args);
+    tab = "view";
+    run(ex.tool, ex.args);
+  }));
+}
+
+(async () => {
+  renderExamples();
+  try {
+    const init = await connect();
+    tools = ((await rpc("tools/list", {})).tools || []).sort((a, b) => a.name.localeCompare(b.name));
+    $("toolSelect").innerHTML = tools.map(t => `<option value="${esc(t.name)}">${esc(t.name)}</option>`).join("");
+    const info = init.serverInfo || {};
+    $("dot").className = "dot ok";
+    $("statusText").textContent = `${info.name || "server"} v${info.version || "?"} · ${tools.length} tools · MCP ${init.protocolVersion}`;
+    $("callMeta").textContent = "";
+    let hash = "";
+    try { hash = decodeURIComponent(location.hash.slice(1)); } catch (e) { /* malformed hash: ignore */ }
+    const pick = EXAMPLES.findIndex(ex => ex.title === hash);
+    if (pick >= 0) $("examples").querySelectorAll(".ex")[pick].click();
+    else selectTool(EXAMPLES[0].tool, EXAMPLES[0].args);
+  } catch (e) {
+    $("dot").className = "dot err";
+    $("statusText").textContent = `not connected: ${e.message}`;
+  }
+})();
+</script>
+</body>
+</html>
