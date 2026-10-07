@@ -47,11 +47,14 @@ def register(mcp: FastMCP, client: BvbClient, settings: Settings) -> None:
             raise ToolError(f"no such BVB symbol: {ticker}")
         form = parse_trading_tab_form(page)
         if form is None:
-            raise ToolError("detail page has no trading tab form (layout changed?)")
+            raise ToolError("detail page has no Tranzactionare tab button (layout changed?)")
         trading = await client.web_postback(_DETAIL_PAGE, params=params, form=form)
-        book = parse_order_book(trading)
+        try:
+            book = parse_order_book(trading)
+        except ValueError as exc:
+            raise ToolError(str(exc)) from exc
         if book is None:
-            raise ToolError("order book table not found (layout changed?)")
+            raise ToolError("order book section not found (layout changed?)")
         return {
             "ticker": ticker.upper(),
             "market": "REGS",

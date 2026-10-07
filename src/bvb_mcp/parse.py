@@ -230,39 +230,63 @@ def parse_fundamentals(html: str) -> dict[str, Any] | None:
     }
 
 
-# Instrument detail page, "Tranzactionare" tab: the main-market top-5 order book
-# (``table#gvMMOrderBook``). Each row is: bid depth bar, Bid Vol, Bid, Ask,
-# Ask Vol, ask depth bar. The bars are each volume relative to the largest on
-# either side, so they are derivable and not parsed.
-_FORM_STATE_NAMES = ("__VIEWSTATE", "__VIEWSTATEGENERATOR", "__EVENTVALIDATION")
+# Instrument detail page, "Tranzactionare" tab: the main-market top-5 order book.
+# The page is located by what a reader sees — the tab's label, the section
+# heading, the column headers, the caption — never by element ids or ASP.NET
+# control names, which the server generates and may regenerate (the tab
+# button's name embeds a GUID that changes on every render).
 TRADING_TAB_LABEL = "Tranzactionare"
 _ORDER_BOOK_HEADING = "Order book piata principala"
-_TRADING_TAB = re.compile(
-    r'<input[^>]*type="submit"[^>]*name="(ctl00\$body\$IFTC\$[^"]+)"[^>]*value="'
-    + TRADING_TAB_LABEL
-    + '"'
-)
-_BOOK_TABLE = re.compile(r'id="gvMMOrderBook"(.*?)</table>', re.DOTALL)
+# Column headers, matched case-insensitively; the depth-bar columns beside them
+# (each volume relative to the largest on either side) have blank headers.
+_BOOK_COLUMNS = ("bid vol", "bid", "ask", "ask vol")
+_FORM = re.compile(r"<form\b.*?</form>", re.DOTALL | re.IGNORECASE)
+_INPUT_TAG = re.compile(r"<input\b[^>]*>", re.DOTALL | re.IGNORECASE)
+_ATTR = re.compile(r"""([A-Za-z_:][-A-Za-z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)')""")
+_TH = re.compile(r"<th\b[^>]*>(.*?)</th>", re.DOTALL | re.IGNORECASE)
 _BOOK_UPDATED = re.compile(r"Ultima actualizare:\s*(\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2})")
 _BUCHAREST = ZoneInfo("Europe/Bucharest")
 
 
-def parse_trading_tab_form(html: str) -> dict[str, str] | None:
-    """Build the postback that switches a detail page to its trading tab.
+def _tag_attrs(tag: str) -> dict[str, str]:
+    """A start tag's quoted attributes by lower-cased name, in any order/quote style."""
+    return {
+        name.lower(): _html.unescape(dq if dq or not sq else sq)
+        for name, dq, sq in _ATTR.findall(tag)
+    }
 
-    Returns the page's ASP.NET form state plus the tab's submit button (whose
-    name embeds a GUID that changes on every render, so it is read from the
-    page), or None when the page lacks ``__VIEWSTATE`` or the tab button.
+
+def _cell_text(fragment: str) -> str:
+    """A cell's visible text: tags stripped, entities decoded, whitespace collapsed."""
+    return " ".join(_html.unescape(_TAG.sub(" ", fragment)).split())
+
+
+def parse_trading_tab_form(html: str) -> dict[str, str] | None:
+    """Build the postback a browser sends when the trading tab is clicked.
+
+    Returns every named hidden field of the page's form (the ASP.NET state —
+    ``__VIEWSTATE``, ``__EVENTVALIDATION``, … — whatever the page carries) plus
+    the tab's submit button, found by its label and echoed under the name the
+    server gave it. Returns None when the page has no such button.
     """
-    form = {"__EVENTTARGET": "", "__EVENTARGUMENT": ""}
-    for name in _FORM_STATE_NAMES:
-        match = re.search(r'id="' + name + r'" value="([^"]*)"', html)
-        if match:
-            form[name] = _html.unescape(match.group(1))
-    button = _TRADING_TAB.search(html)
-    if not form.get("__VIEWSTATE") or not button:
+    form_match = _FORM.search(html)
+    scope = form_match.group(0) if form_match else html
+    form: dict[str, str] = {}
+    button = None
+    for tag in _INPUT_TAG.findall(scope):
+        attrs = _tag_attrs(tag)
+        name = attrs.get("name")
+        if not name:
+            continue  # nameless inputs are not submitted
+        kind = attrs.get("type", "").lower()
+        if kind == "hidden":
+            form[name] = attrs.get("value", "")
+        elif kind == "submit" and button is None:
+            if attrs.get("value", "").strip() == TRADING_TAB_LABEL:
+                button = name
+    if button is None:
         return None
-    form[button.group(1)] = TRADING_TAB_LABEL
+    form[button] = TRADING_TAB_LABEL
     return form
 
 
@@ -274,34 +298,61 @@ def _book_level(price: str, volume: str) -> dict[str, Any] | None:
     return {"price": p, "volume": v}
 
 
+def _parse_book_table(table: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Read the book's rows, locating each column by its header text."""
+    headers = {_cell_text(h).lower(): i for i, h in enumerate(_TH.findall(table))}
+    idx = [headers.get(name) for name in _BOOK_COLUMNS]
+    bids: list[dict[str, Any]] = []
+    asks: list[dict[str, Any]] = []
+    for row_html in _ROW.findall(table):
+        cells = [_cell_text(c) for c in _CELL.findall(row_html)]
+        if len(cells) <= 1:
+            continue  # header row, or a full-width message (GridView EmptyDataText)
+        if None in idx:
+            raise ValueError("order book columns not found (layout changed?)")
+        bid_vol, bid, ask, ask_vol = (cells[i] if i < len(cells) else "" for i in idx)
+        if level := _book_level(bid, bid_vol):
+            bids.append(level)
+        if level := _book_level(ask, ask_vol):
+            asks.append(level)
+    return bids, asks
+
+
 def parse_order_book(html: str) -> dict[str, Any] | None:
     """Parse the trading tab's top-5 order book.
 
-    Returns ``bids`` (best/highest first), ``asks`` (best/lowest first) as
+    The book is the first table in the section under the "Order book piata
+    principala" heading (the section ends at the next ``<h2>``). Returns
+    ``bids`` (best/highest first), ``asks`` (best/lowest first) as
     ``{"price", "volume"}`` dicts, and ``updated_at`` (ISO 8601 in
-    Europe/Bucharest, or None). Blank sides of a row (a thin book) are skipped.
-    The section heading without the table is an empty book (a zero-row ASP.NET
-    GridView renders no ``<table>``). Returns None when both are absent (the
-    page is not the trading tab).
+    Europe/Bucharest, or None). Blank sides of a row (a thin book) are skipped;
+    a section with no table is an empty book (a zero-row ASP.NET GridView
+    renders no ``<table>``). Returns None when the section is absent (the page
+    is not the trading tab).
+
+    Raises:
+        ValueError: the table has data rows but not the expected column headers.
     """
-    table = _BOOK_TABLE.search(html)
-    heading = html.find(_ORDER_BOOK_HEADING)
-    if not table and heading < 0:
+    start = html.find(_ORDER_BOOK_HEADING)
+    if start < 0:
         return None
-    start = table.start() if table else heading
+    section = html[start:]
+    heading_end = section.find("</h2>")
+    if heading_end >= 0:
+        next_heading = section.find("<h2", heading_end)
+        if next_heading >= 0:
+            section = section[:next_heading]
+
     bids: list[dict[str, Any]] = []
     asks: list[dict[str, Any]] = []
-    for row_html in _ROW.findall(table.group(1) if table else ""):
-        cells = [_text(c) for c in _CELL.findall(row_html)]
-        if len(cells) < 5:
-            continue  # header row (<th>) or malformed
-        if bid := _book_level(cells[2], cells[1]):
-            bids.append(bid)
-        if ask := _book_level(cells[3], cells[4]):
-            asks.append(ask)
+    table_start = section.find("<table")
+    if table_start >= 0:
+        table = section[table_start:]
+        table_end = table.find("</table>")
+        bids, asks = _parse_book_table(table[:table_end] if table_end >= 0 else table)
 
     updated_at = None
-    match = _BOOK_UPDATED.search(html, start)
+    match = _BOOK_UPDATED.search(section)
     if match:
         try:
             stamp = datetime.strptime(match.group(1), "%d.%m.%Y %H:%M:%S")
