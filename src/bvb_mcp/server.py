@@ -31,6 +31,7 @@ DOMAIN_MODULES: tuple[str, ...] = (
     "candles",
     "universe",
     "fundamentals",
+    "orderbook",
 )
 
 

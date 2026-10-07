@@ -9,9 +9,12 @@ HTML dependency) tied to the exact markup those tables emit.
 
 from __future__ import annotations
 
+import html as _html
 import re
 import unicodedata
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 # Rows of the market GridView (``<table id="gv">``): the first cell links to the
 # instrument detail page (``?s=TICKER``) with the ticker in bold and the ISIN in
@@ -225,3 +228,85 @@ def parse_fundamentals(html: str) -> dict[str, Any] | None:
         "first_trade_date": _iso_date(_detail_field(html, "Data start tranzactionare")),
         "shareholders": shareholders,
     }
+
+
+# Instrument detail page, "Tranzactionare" tab: the main-market top-5 order book
+# (``table#gvMMOrderBook``). Each row is: bid depth bar, Bid Vol, Bid, Ask,
+# Ask Vol, ask depth bar. The bars are each volume relative to the largest on
+# either side, so they are derivable and not parsed.
+_FORM_STATE_NAMES = ("__VIEWSTATE", "__VIEWSTATEGENERATOR", "__EVENTVALIDATION")
+TRADING_TAB_LABEL = "Tranzactionare"
+_ORDER_BOOK_HEADING = "Order book piata principala"
+_TRADING_TAB = re.compile(
+    r'<input[^>]*type="submit"[^>]*name="(ctl00\$body\$IFTC\$[^"]+)"[^>]*value="'
+    + TRADING_TAB_LABEL
+    + '"'
+)
+_BOOK_TABLE = re.compile(r'id="gvMMOrderBook"(.*?)</table>', re.DOTALL)
+_BOOK_UPDATED = re.compile(r"Ultima actualizare:\s*(\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2})")
+_BUCHAREST = ZoneInfo("Europe/Bucharest")
+
+
+def parse_trading_tab_form(html: str) -> dict[str, str] | None:
+    """Build the postback that switches a detail page to its trading tab.
+
+    Returns the page's ASP.NET form state plus the tab's submit button (whose
+    name embeds a GUID that changes on every render, so it is read from the
+    page), or None when the page lacks ``__VIEWSTATE`` or the tab button.
+    """
+    form = {"__EVENTTARGET": "", "__EVENTARGUMENT": ""}
+    for name in _FORM_STATE_NAMES:
+        match = re.search(r'id="' + name + r'" value="([^"]*)"', html)
+        if match:
+            form[name] = _html.unescape(match.group(1))
+    button = _TRADING_TAB.search(html)
+    if not form.get("__VIEWSTATE") or not button:
+        return None
+    form[button.group(1)] = TRADING_TAB_LABEL
+    return form
+
+
+def _book_level(price: str, volume: str) -> dict[str, Any] | None:
+    """One side of an order-book row, or None when that side is blank."""
+    p, v = _ro_float(price), _ro_int(volume)
+    if not p or not v or p <= 0 or v <= 0:
+        return None
+    return {"price": p, "volume": v}
+
+
+def parse_order_book(html: str) -> dict[str, Any] | None:
+    """Parse the trading tab's top-5 order book.
+
+    Returns ``bids`` (best/highest first), ``asks`` (best/lowest first) as
+    ``{"price", "volume"}`` dicts, and ``updated_at`` (ISO 8601 in
+    Europe/Bucharest, or None). Blank sides of a row (a thin book) are skipped.
+    The section heading without the table is an empty book (a zero-row ASP.NET
+    GridView renders no ``<table>``). Returns None when both are absent (the
+    page is not the trading tab).
+    """
+    table = _BOOK_TABLE.search(html)
+    heading = html.find(_ORDER_BOOK_HEADING)
+    if not table and heading < 0:
+        return None
+    start = table.start() if table else heading
+    bids: list[dict[str, Any]] = []
+    asks: list[dict[str, Any]] = []
+    for row_html in _ROW.findall(table.group(1) if table else ""):
+        cells = [_text(c) for c in _CELL.findall(row_html)]
+        if len(cells) < 5:
+            continue  # header row (<th>) or malformed
+        if bid := _book_level(cells[2], cells[1]):
+            bids.append(bid)
+        if ask := _book_level(cells[3], cells[4]):
+            asks.append(ask)
+
+    updated_at = None
+    match = _BOOK_UPDATED.search(html, start)
+    if match:
+        try:
+            stamp = datetime.strptime(match.group(1), "%d.%m.%Y %H:%M:%S")
+        except ValueError:
+            stamp = None  # matched the pattern but is not a real date
+        if stamp:
+            updated_at = stamp.replace(tzinfo=_BUCHAREST).isoformat()
+    return {"bids": bids, "asks": asks, "updated_at": updated_at}

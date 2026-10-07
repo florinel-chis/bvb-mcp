@@ -19,6 +19,7 @@ READ_TOOLS = frozenset(
         "list_indices",
         "get_fundamentals",
         "financial_summary",
+        "get_order_book",
     }
 )
 

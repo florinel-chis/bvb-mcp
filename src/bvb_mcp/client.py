@@ -83,14 +83,20 @@ class BvbClient:
         )
 
     async def _request(
-        self, http: httpx.AsyncClient, path: str, params: dict[str, Any] | None
+        self,
+        http: httpx.AsyncClient,
+        path: str,
+        params: dict[str, Any] | None,
+        form: dict[str, str] | None = None,
     ) -> httpx.Response:
+        """GET (or, when *form* is given, form-POST) with one retry on HTTP 429."""
         if params is not None:
             params = {key: value for key, value in params.items() if value is not None}
-        response = await http.get(path, params=params or None)
+        method = "POST" if form is not None else "GET"
+        response = await http.request(method, path, params=params or None, data=form)
         if response.status_code == 429:
             await asyncio.sleep(_retry_after_seconds(response))
-            response = await http.get(path, params=params or None)
+            response = await http.request(method, path, params=params or None, data=form)
         if response.status_code >= 400:
             raise ToolError(f"HTTP {response.status_code}: {_error_message(response)}")
         return response
@@ -124,6 +130,17 @@ class BvbClient:
     async def web_html(self, path: str, *, params: dict[str, Any] | None = None) -> str:
         """GET a market-list page from ``www.bvb.ro`` and return its HTML."""
         response = await self._request(self._web, path, params)
+        return response.text
+
+    async def web_postback(
+        self, path: str, *, params: dict[str, Any] | None = None, form: dict[str, str]
+    ) -> str:
+        """POST an ASP.NET WebForms postback to ``www.bvb.ro`` and return its HTML.
+
+        Used to switch a page to a server-side tab (e.g. the instrument detail
+        page's "Tranzactionare" tab, which renders the order book).
+        """
+        response = await self._request(self._web, path, params, form)
         return response.text
 
     async def aclose(self) -> None:

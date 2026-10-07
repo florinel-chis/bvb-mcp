@@ -3,7 +3,8 @@
 Read-only MCP server for the **Bucharest Stock Exchange** (Bursa de Valori
 București, BVB). It exposes BVB's own public backend — the TradingView-UDF
 datafeed at `wapi.bvb.ro` and the market-list pages at `www.bvb.ro` — as MCP
-tools: instrument universe, symbol search and metadata, and OHLCV candles.
+tools: instrument universe, symbol search and metadata, OHLCV candles,
+fundamentals, and the top-5 order book.
 
 No account, no API key, no token: the BVB backend is public and unauthenticated.
 Every tool is read-only; there is nothing to trade through here.
@@ -35,6 +36,7 @@ All tools are read-only (there are no write tools):
 | `get_candles` | OHLCV candles for a ticker/index at minute/daily/weekly/monthly resolution |
 | `get_fundamentals` | Company details + valuation snapshot scraped from the detail page: identity, Indicatori bursieri (market cap, P/E, P/BV, EPS, div yield, dividend), issue info, and ownership structure |
 | `financial_summary` | One-call bundle for a fundamental ("Buffett-style") analysis: `get_fundamentals` + a price summary (last close, 52-week range, 1y/5y change). Returns data, not a verdict |
+| `get_order_book` | Main-market (REGS) top-5 order book: bids/asks as `{price, volume}` levels, `updated_at`, and a `delayed` flag (BVB publishes it 15 min delayed). Replays the detail page's "Tranzactionare" tab postback (two requests) |
 | `server_time` | Datafeed server time (reachability check) |
 | `datafeed_config` | Datafeed configuration: instrument-type codes and supported resolutions |
 
